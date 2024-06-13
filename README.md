@@ -32,15 +32,6 @@ export OPENAI_API_KEY=YOUR_API_KEY
 
 ### Step 3. Run the Scripts
 
-#### Evaluation Demo
-
-To point out, the following script is just a minimal demo that only supports the TogetherAI API key.
-
-```bash
-export TOGETHERAI_API_KEY=YOUR_API_KEY
-python examples/evaluate_log.py
-```
-
 #### (Recommended) Detailed Evaluations
 
 For more detailed evaluations with different models, you can run with model providers supported by LiteLLM. We recommend [TogetherAI](https://docs.litellm.ai/docs/providers/togetherai) and [OpenAI](https://docs.litellm.ai/docs/providers/openai), as all evaluators in our scripts are from these two providers.
@@ -54,3 +45,13 @@ After you set the API key, you could run the experiments for **held-out** & **pi
 
 - **Held-out Evaluation Scripts**: See `evaluation/heldout_eval/readme.md`.
 - **Pipeline Evaluation Scripts**: See `evaluation/pipeline_eval/readme.md`.
+
+
+#### Evaluation Demo
+
+To point out, the following script is just a minimal demo that only supports the TogetherAI API key. This conceptual demo is just to help you understand the progress of pipeline evaluation for ideas, papers, and reviews. 
+
+```bash
+export TOGETHERAI_API_KEY=YOUR_API_KEY
+python examples/evaluate_log.py
+```

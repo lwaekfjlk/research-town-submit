@@ -11,7 +11,7 @@ from research_town.evaluators import (
     ReviewQualityEvaluator,
 )
 
-from .evaluator_constants import (
+from evaluator_constants import (
     idea_A,
     insight_A,
     paper_meta_review_A,
