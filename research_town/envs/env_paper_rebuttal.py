@@ -1,0 +1,153 @@
+from beartype import beartype
+from beartype.typing import Dict, Generator, List, Tuple, Union
+import json
+from ..configs import Config
+from ..dbs import (
+    AgentPaperMetaReviewLog,
+    AgentPaperRebuttalLog,
+    AgentPaperReviewLog,
+    AgentProfile,
+    AgentProfileDB,
+    EnvLogDB,
+    PaperProfile,
+    PaperProfileDB,
+    ResearchPaperSubmission,
+)
+from .env_base import BaseMultiAgentEnv
+
+LogType = Union[List[Dict[str, str]], None]
+from ..utils.serializer import Serializer
+
+class PaperRebuttalMultiAgentEnv(BaseMultiAgentEnv):
+    def __init__(
+        self,
+        agent_profiles: List[AgentProfile],
+        agent_db: AgentProfileDB,
+        paper_db: PaperProfileDB,
+        env_db: EnvLogDB,
+        config: Config,
+    ) -> None:
+        super().__init__(agent_profiles,config)
+        self.decision = 'reject'
+        self.submission = PaperProfile()
+        self.reviewer_mask = [False] * len(agent_profiles)
+        self.reviews: List[AgentPaperReviewLog] = []
+        self.rebuttals: List[AgentPaperRebuttalLog] = []
+        self.meta_reviews: List[AgentPaperMetaReviewLog] = []
+        self.agent_db = agent_db
+        self.paper_db = paper_db
+        self.env_db = env_db
+        self.config = config
+        self.log_reviews=dict()
+        self.author_sub=dict()
+        self.serializer = Serializer()
+
+    @beartype
+    def assign_roles(self, num: int = 1) -> None:
+        for name in self.submission.keys():
+            self.log_reviews[name]={'abstract':self.submission[name].abstract,'authors':self.submission[name].authors,
+                                    'idea':self.submission[name].insight}
+            self.author_sub[name]=self.submission[name]
+        for name in self.log_reviews.keys():
+            self.reviewer_mask_tem = self.reviewer_mask.copy()
+            reviewer_profiles = []
+            for agent_profile in self.agent_profiles:
+                if agent_profile.pk not in self.log_reviews[name]:
+                    reviewer_profiles.append(agent_profile)
+
+            reviewer_pks = self.agent_db.match(
+                idea=self.log_reviews[name]['abstract'], agent_profiles=reviewer_profiles, num=num
+            )
+            for index, agent_profile in enumerate(self.agent_profiles):
+                if agent_profile.pk in reviewer_pks:
+                    self.reviewer_mask_tem[index] = True
+            self.log_reviews[name]['reviewer_mask']=self.reviewer_mask_tem
+
+    @beartype
+    def initialize_submission(self, paper_profile: Dict[str,ResearchPaperSubmission]) -> None:
+        self.submission = paper_profile
+
+    @beartype
+    def submit_decision(self, decision_dict: Dict[str, Tuple[bool, str]]) -> None:
+        decision_count = {'accept': 0, 'reject': 0}
+        for _, decision in decision_dict.items():
+            if decision[0]:
+                decision_count['accept'] += 1
+            else:
+                decision_count['reject'] += 1
+        count_max = 0
+        for d, count in decision_count.items():
+            if count > count_max:
+                count_max = count
+                self.decision = d
+
+    def next_step_(
+        self):
+        log_save={}
+
+        # Paper Reviewing
+        for name in self.log_reviews.keys():
+            self.reviews: List[AgentPaperReviewLog] = []
+            self.rebuttals: List[AgentPaperRebuttalLog] = []
+            self.meta_reviews: List[AgentPaperMetaReviewLog] = []
+            for index, agent in enumerate(self.agents):
+                if self.log_reviews[name]['reviewer_mask'][index]:
+                    review = agent.write_paper_review(
+                        profile=agent.profile,
+                        paper=self.author_sub[name],
+                        config=self.config,
+                    )
+                    self.reviews.append(review)
+
+            # Rebuttal Submitting
+            ip = 0
+            for index, agent in enumerate(self.agents):
+                if self.log_reviews[name]['reviewer_mask'][index]:
+                    if ip == 0:
+                        for review in self.reviews:
+                            rebuttal = agent.write_rebuttal(
+                                paper=self.author_sub[name],
+                                review=review,
+                                config=self.config,
+                            )
+                            self.rebuttals.append(rebuttal)
+                        ip = 1
+
+            # Paper Meta Reviewing
+            ip=0
+            for index, agent in enumerate(self.agents):
+                if ip==0:
+                    meta_review = agent.write_paper_meta_review(
+                        paper=self.author_sub[name],
+                        reviews=self.reviews,
+                        rebuttals=rebuttal,
+                        config=self.config,
+                    )
+                    self.meta_reviews.append(meta_review)
+                    ip+=1
+
+            last_reviews=self.serializer.serialize(self.reviews)
+            last_rebuttals=self.serializer.serialize(self.rebuttals)
+            last_meta_reviews=self.serializer.serialize(self.meta_reviews)
+            final_reviews=''
+            final_rubuttals=''
+            for review in last_reviews:
+                final_reviews+=review['review_content']
+            for rebuttal in last_rebuttals:
+                final_rubuttals+=rebuttal['rebuttal_content']
+
+
+            self.log_reviews[name]['reviews']=final_reviews
+            self.log_reviews[name]['rebuttals'] =final_rubuttals
+            self.log_reviews[name]['meta_reviews'] = last_meta_reviews[0]['meta_review']
+
+            log_save[name]={}
+            log_save[name]['reviews'] = final_reviews
+            log_save[name]['rebuttals'] = final_rubuttals
+            log_save[name]['meta_reviews'] = last_meta_reviews[0]['meta_review']
+            log_save[name]['idea']=self.log_reviews[name]['idea']
+            log_save[name]['paper']=self.log_reviews[name]['abstract']
+
+        with open('./result/'+self.config.param.result_path+'/'+self.config.param.domain+'.json', 'w') as json_file:
+            json.dump(log_save, json_file)
+        self.terminated = True
