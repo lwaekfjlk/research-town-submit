@@ -1,5 +1,1 @@
-# ResearchTown: Simulator of Human Research 
-
-In `research-town` branch, we support the research simulation.
-
-In `research-eval` branch, we support the research evaluation.
+We release all of our evaluation and simulation data in this branch.
