@@ -49,7 +49,7 @@ After you set the API key, you could run the experiments for **held-out** & **pi
 
 #### Evaluation Demo
 
-To point out, the following script is just a minimal demo that only supports the TogetherAI API key. This conceptual demo is just to help you understand the progress of pipeline evaluation for ideas, papers, and reviews. 
+To point out, the following script is just a minimal demo that only supports the TogetherAI API key. This conceptual demo is just to help you understand the process of pipeline evaluation for ideas, papers, and reviews, which are cascaded. 
 
 ```bash
 export TOGETHERAI_API_KEY=YOUR_API_KEY
